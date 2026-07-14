@@ -1,0 +1,224 @@
+*lvim-indent.txt*    Indent guides that know what you are inside of
+
+==============================================================================
+CONTENTS                                              *lvim-indent*
+
+  1. Introduction ........................... |lvim-indent-intro|
+  2. Setup .................................. |lvim-indent-setup|
+  3. Guides ................................. |lvim-indent-guides|
+  4. Scope .................................. |lvim-indent-scope|
+  5. Chunk .................................. |lvim-indent-chunk|
+  6. Exclusions ............................. |lvim-indent-exclude|
+  7. Commands ............................... |lvim-indent-commands|
+  8. API .................................... |lvim-indent-api|
+  9. Statuscolumn ........................... |lvim-indent-statuscolumn|
+ 10. Highlights ............................. |lvim-indent-highlights|
+ 11. Health ................................ |lvim-indent-health|
+
+==============================================================================
+1. INTRODUCTION                                 *lvim-indent-intro*
+
+lvim-indent draws an indent guide at every indent level of every visible
+line — including through blank lines, for as long as the block runs — and
+lights the innermost scope enclosing the cursor: as a brighter guide, as a
+chunk bracket showing the block's shape, or both.
+
+Everything is painted by ONE decoration provider with ephemeral extmarks:
+only the lines actually on screen are ever computed, at redraw time, with a
+per-buffer indent cache keyed by |changedtick|. Guides are placed at DISPLAY
+columns, so tab indentation, 'vartabstop' and mixed tab+space files render
+on the true screen cells. A guide never overwrites a real character.
+
+All colours derive from the lvim-utils palette and rebuild on |ColorScheme|
+/ palette sync.
+
+==============================================================================
+2. SETUP                                        *lvim-indent-setup*
+>lua
+  require("lvim-indent").setup({
+      char = "▏",              -- the guide glyph
+      blank_char = "▏",        -- what a blank line draws ("" = nothing)
+      smart_indent_cap = true, -- gaps between blocks take the shallower depth
+      levels = { rainbow = false, accent = "fg_dark", tint = 1 },
+      scope = {
+          engine = "treesitter", -- "treesitter" | "indent"
+          style = "guide",       -- "guide" | "chunk" | "both"
+          accent = "yellow",
+          show_start = true,     -- underline the scope's first line
+          show_end = true,       -- underline the scope's last line
+          animate = { frames = 0, easing = "out" },
+      },
+      exclude = { filetypes = { "markdown", "help", "..." } },
+  })
+<
+See README.md for the FULL default config with every option and its
+default. Every glyph must be a single display cell wide — setup() rejects
+wide glyphs with a precise error (an overlay glyph wider than its cell
+would shift the text).
+
+==============================================================================
+3. GUIDES                                       *lvim-indent-guides*
+
+A guide is drawn at each indent level's display column, for every visible
+line of an allowed buffer (see |lvim-indent-exclude|):
+
+- SPACE indentation puts a level at every 'shiftwidth' column.
+- TAB indentation puts a level at every tab stop, honouring 'tabstop' and
+  'vartabstop'; the glyph there is `tab_char` (or `char` when unset).
+- MIXED indentation combines both — stops land where the whitespace
+  actually renders.
+- BLANK lines continue the surrounding block's guides using `blank_char`.
+  Their depth is taken from the non-blank neighbours: the deeper one, or —
+  with `smart_indent_cap` (default) — the SHALLOWER one, so the gap between
+  a deep block and a top-level statement draws no phantom guides.
+- With `levels.rainbow` each depth cycles an accent from `levels.accents`
+  (|lvim-indent-highlights|).
+- With `levels.diagnostics` a level whose block contains an error/warning
+  diagnostic takes the diagnostic accent instead of its level colour.
+- Levels beyond `max_indent_level` are not drawn; a buffer longer than
+  `max_file_lines` is skipped entirely.
+- Inside a closed fold nothing is drawn — the fold's display line keeps its
+  foldtext untouched.
+- On wrapped lines with 'breakindent' set, guides repeat on the
+  continuation lines.
+
+==============================================================================
+4. SCOPE                                        *lvim-indent-scope*
+
+The scope is the innermost multi-line block enclosing the cursor that OWNS
+deeper lines — a node with a header line and an indented body. It is
+re-resolved on cursor movement (debounced, `scope.debounce` ms), never per
+redraw; the decoration provider only paints the resolved state.
+
+Engines (`scope.engine`):
+
+  treesitter    The enclosing node, filtered per language by
+                `scope.include` / `scope.exclude` (maps language → node
+                types; "*" = any). The buffer's language comes from
+                lvim-ts, the set's parser registry. Injected languages are
+                honoured. Header-less wrapper nodes (a Python `block`, a
+                Lua `chunk`) are skipped up to the statement that owns
+                them, so the scope's guide column is always paintable.
+                Falls back to `indent` automatically when the buffer has
+                no active parser.
+
+  indent        Pure indentation, no parser: the run of lines at (or
+                deeper than) the cursor line's indent, headed by the first
+                shallower non-blank line above.
+
+Rendering (`scope.style`): "guide" draws a brighter guide down the body at
+the header's indent column; "chunk" draws the bracket
+(|lvim-indent-chunk|); "both" draws both. `show_start` / `show_end`
+underline the scope's first / last line. On delimiter languages the
+closing line ("end", "}") takes the underline while the body ends above
+it; delimiter-less blocks (Python, YAML) run to their last line.
+
+`scope.animate.frames > 0` grows the scope from the cursor line outward
+over that many frames (`easing`: "linear", "out", "in_out").
+
+==============================================================================
+5. CHUNK                                        *lvim-indent-chunk*
+
+With `scope.style = "chunk"` (or "both") the scope's SHAPE is drawn as a
+bracket hugging the block's guide column: >
+
+    def __init__(self, name):        <- show_start underline
+    ╭───self.name = name
+    │   if name:
+    │       self.tag = name.upper()
+    ╰───self.done = True
+<
+`╭` + a `─` run on the first body line, `│` down the middle, `╰` + the run
+on the last; a single-line body degrades to one horizontal run. The run
+always stops before the line's first character. While the scope contains a
+closed fold the bracket wears `chunk.folded_accent`
+(|hl-LvimIndentChunkFolded|).
+
+==============================================================================
+6. EXCLUSIONS                                   *lvim-indent-exclude*
+
+A buffer that is not real file content NEVER gets guides, by construction:
+any 'buftype' other than empty (terminals, panels, trees, quickfix, help,
+prompts) is out — no filetype list needed for chrome. On top of that rule:
+
+- `exclude.filetypes` — real files that still want none (prose, logs).
+- `exclude.buftypes` — extra buftypes (redundant with the built-in rule,
+  kept for explicit configs).
+- `max_file_lines` — a longer buffer is skipped entirely.
+- a per-buffer switch — |lvim-indent-commands| / |lvim-indent-api|.
+
+`:checkhealth lvim-indent` prints the exact decision (and reason) for the
+current buffer.
+
+==============================================================================
+7. COMMANDS                                     *lvim-indent-commands*
+
+                                                *:LvimIndent*
+:LvimIndent                     Toggle globally.
+:LvimIndent enable|disable|toggle
+                                Flip the global switch.
+:LvimIndent {action} buffer     The same, for the current buffer only.
+:LvimIndent refresh [buffer]    Drop the indent cache, re-resolve the
+                                scope, repaint.
+
+==============================================================================
+8. API                                          *lvim-indent-api*
+>lua
+  local li = require("lvim-indent")
+  li.enable(buf)   -- buf: nil = global, 0/bufnr = that buffer
+  li.disable(buf)
+  li.toggle(buf)
+  li.refresh(buf)
+  li.enabled(buf)  -- boolean; nil = the global switch only
+<
+                                                *LvimIndentChanged*
+Every state change fires a |User| autocmd with pattern `LvimIndentChanged`
+and `data = { buf = <bufnr>|nil, enabled = <boolean> }` (buf = nil for the
+global switch) — for a statusline or the control-center to mirror.
+
+==============================================================================
+9. STATUSCOLUMN                                 *lvim-indent-statuscolumn*
+
+With `statuscolumn = { enabled = true }` the over-text scope guide is
+suppressed and the bracket is exposed as a gutter component instead: >lua
+
+  vim.o.statuscolumn =
+      "%{%v:lua.require'lvim-indent.statuscolumn'.component()%}%s%l "
+<
+The component renders exactly one cell — the bracket inside the scope
+body, a space elsewhere, so the gutter width never jumps.
+
+==============================================================================
+10. HIGHLIGHTS                                  *lvim-indent-highlights*
+
+All groups are built from the live lvim-utils palette, with the accents
+and fg-blend strengths from the config, and rebuild on |ColorScheme| /
+palette sync.
+
+*hl-LvimIndentGuide*        every level (rainbow off) — `levels.accent`
+*hl-LvimIndentGuide1*       …`LvimIndentGuideN`: the rainbow cycle, one
+                            per entry of `levels.accents`
+*hl-LvimIndentScope*        the scope guide — `scope.accent`
+*hl-LvimIndentScopeStart*   underline of the scope's first line
+*hl-LvimIndentScopeEnd*     underline of the scope's last line
+*hl-LvimIndentChunk*        the chunk bracket
+*hl-LvimIndentChunkFolded*  the bracket while the scope contains a closed
+                            fold — `chunk.folded_accent`
+*hl-LvimIndentDiagError*    diagnostics-aware level tint (error)
+*hl-LvimIndentDiagWarn*     diagnostics-aware level tint (warning)
+
+==============================================================================
+11. HEALTH                                      *lvim-indent-health*
+
+`:checkhealth lvim-indent` reports:
+
+- Neovim / lvim-utils requirements
+- every configured glyph's display width
+- the exclusion decision for the current buffer, with the exact reason
+  when it gets no guides
+- the scope engine that actually runs there (treesitter via lvim-ts, or
+  the indent fallback and why)
+- the currently resolved scope
+- the measured cost of one cold repaint of the visible lines
+
+vim:tw=78:ts=8:noet:ft=help:norl:
