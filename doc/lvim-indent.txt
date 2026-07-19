@@ -142,8 +142,6 @@ any 'buftype' other than empty (terminals, panels, trees, quickfix, help,
 prompts) is out — no filetype list needed for chrome. On top of that rule:
 
 - `exclude.filetypes` — real files that still want none (prose, logs).
-- `exclude.buftypes` — extra buftypes (redundant with the built-in rule,
-  kept for explicit configs).
 - `max_file_lines` — a longer buffer is skipped entirely.
 - a per-buffer switch — |lvim-indent-commands| / |lvim-indent-api|.
 

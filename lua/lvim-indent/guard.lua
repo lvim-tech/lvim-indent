@@ -53,12 +53,9 @@ function M.decide(buf)
     end
     local bt = vim.bo[buf].buftype
     if bt ~= "" then
+        -- The by-construction guard already rejects EVERY non-empty buftype, so a `config.exclude.buftypes`
+        -- allow/deny list would be unreachable — the option was removed rather than shipped dead.
         return false, ('buftype "%s" is not file content (built-in guard)'):format(bt)
-    end
-    for _, b in ipairs(config.exclude.buftypes) do
-        if b == bt then
-            return false, ('buftype "%s" is in exclude.buftypes'):format(bt)
-        end
     end
     local ft = vim.bo[buf].filetype
     for _, f in ipairs(config.exclude.filetypes) do

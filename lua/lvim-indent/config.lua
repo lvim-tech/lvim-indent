@@ -47,7 +47,6 @@
 
 ---@class LvimIndentExclude
 ---@field filetypes string[]  Real-file filetypes that still want no guides
----@field buftypes  string[]  Extra buftypes, on top of the built-in `buftype ~= ""` guard
 
 ---@class LvimIndentStatuscolumn
 ---@field enabled boolean  Expose the scope in the gutter instead of over the text (suppresses the
@@ -123,7 +122,6 @@ return {
         -- Non-file buffers (panels, trees, terminals, quickfix, prompts …) are excluded by
         -- CONSTRUCTION (buftype ~= ""), never by name — these are the exceptions among REAL files.
         filetypes = { "checkhealth", "gitcommit", "help", "log", "man", "markdown", "org", "text" },
-        buftypes = {},
     },
 
     statuscolumn = { enabled = false },

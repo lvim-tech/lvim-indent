@@ -103,7 +103,6 @@ require("lvim-indent").setup({
         -- Non-file buffers are excluded by CONSTRUCTION (buftype ~= ""), never by name.
         -- These are the exceptions among REAL files.
         filetypes = { "checkhealth", "gitcommit", "help", "log", "man", "markdown", "org", "text" },
-        buftypes = {}, -- extra, on top of the built-in rule
     },
 
     statuscolumn = { enabled = false }, -- scope in the gutter instead of over the text

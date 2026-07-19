@@ -73,7 +73,10 @@ local function mark_diag_block(map, buf, dline, sev, top, bot)
     for _, dir in ipairs({ -1, 1 }) do
         local minw = math.huge
         local r = dline
-        while r >= top - 1 and r <= bot + 1 do
+        -- One-sided per direction: a diagnostic up to 300 rows OFF-screen (see diag_map) must be able to START
+        -- its walk outside [top-1, bot+1] and accumulate toward the viewport. A two-sided bound killed the first
+        -- iteration for an off-screen dline, so the ±300 window (and the tint on a partly-visible block) was dead.
+        while (dir == -1 and r >= top - 1) or (dir == 1 and r <= bot + 1) do
             if r ~= dline then
                 local li = cache.info(ctx.cache, buf, r)
                 if not li.blank then
