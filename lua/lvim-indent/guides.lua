@@ -250,14 +250,33 @@ local function on_line(_, win, buf, row)
     if info.blank then
         local ch = config.blank_char
         if ch ~= "" then
-            local depth = cache.blank_depth(ctx.cache, buf, row, config.smart_indent_cap)
-            local level, col = 0, 0
-            while col < depth and level < max_level do
-                level = level + 1
-                if col ~= scope_col then
-                    put(buf, row, col, { { ch, guide_hl(level, row, col) } }, PRIO_GUIDE)
+            -- Draw on the REAL stops of whichever neighbour supplied this row's depth, so a blank
+            -- row inside a tab-indented block lines up with the guides above and below it. Multiples
+            -- of 'shiftwidth' only coincide with the true columns when `sw == ts` and 'vartabstop' is
+            -- unset; elsewhere they drifted (one tab with `sw=4 ts=8` drew guides at 0 AND 4, where
+            -- the surrounding lines have a single guide at 0).
+            local depth, stops = cache.blank_stops(ctx.cache, buf, row, config.smart_indent_cap)
+            if stops then
+                for level, stop in ipairs(stops) do
+                    if level > max_level then
+                        break
+                    end
+                    -- The BLANK char is kept (the row has no tab of its own to draw); only the COLUMN
+                    -- comes from the source line.
+                    if stop.col ~= scope_col then
+                        put(buf, row, stop.col, { { ch, guide_hl(level, row, stop.col) } }, PRIO_GUIDE)
+                    end
                 end
-                col = col + sw
+            else
+                -- No neighbour found (an all-blank region): the shiftwidth grid is all we know.
+                local level, col = 0, 0
+                while col < depth and level < max_level do
+                    level = level + 1
+                    if col ~= scope_col then
+                        put(buf, row, col, { { ch, guide_hl(level, row, col) } }, PRIO_GUIDE)
+                    end
+                    col = col + sw
+                end
             end
         end
     else

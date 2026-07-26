@@ -29,6 +29,7 @@ local M = {}
 ---@field vts   string   vartabstop option string ("" when unset)
 ---@field lines table<integer, LvimIndentLineInfo>  0-based row → parsed line info
 ---@field blank table<integer, integer>  0-based blank row → resolved guide depth (display cols)
+---@field blank_src table<integer, integer|false>  blank row → the neighbour row that supplied that depth
 ---@field package _vts_list integer[]|nil  Parsed 'vartabstop' widths (lazy)
 
 ---@type table<integer, LvimIndentBufCache>
@@ -70,7 +71,7 @@ function M.ctx(buf)
     local sw = bo.shiftwidth ~= 0 and bo.shiftwidth or bo.tabstop
     local entry = buffers[buf]
     if not entry or entry.tick ~= tick or entry.sw ~= sw or entry.ts ~= bo.tabstop or entry.vts ~= bo.vartabstop then
-        entry = { tick = tick, sw = sw, ts = bo.tabstop, vts = bo.vartabstop, lines = {}, blank = {} }
+        entry = { tick = tick, sw = sw, ts = bo.tabstop, vts = bo.vartabstop, lines = {}, blank = {}, blank_src = {} }
         buffers[buf] = entry
     end
     return entry
@@ -154,23 +155,57 @@ function M.blank_depth(ctx, buf, row, cap)
     end
     local total = vim.api.nvim_buf_line_count(buf)
     local prev, nxt = 0, 0
+    local prev_row, nxt_row = nil, nil
     for r = row - 1, math.max(0, row - BLANK_SCAN_LIMIT), -1 do
         local info = M.info(ctx, buf, r)
         if not info.blank then
-            prev = info.width
+            prev, prev_row = info.width, r
             break
         end
     end
     for r = row + 1, math.min(total - 1, row + BLANK_SCAN_LIMIT) do
         local info = M.info(ctx, buf, r)
         if not info.blank then
-            nxt = info.width
+            nxt, nxt_row = info.width, r
             break
         end
     end
     local depth = cap and math.min(prev, nxt) or math.max(prev, nxt)
+    -- WHICH neighbour supplied the depth is remembered, not just how deep it was: a blank row must
+    -- draw its guides on that line's REAL indent stops. Synthesising `0, sw, 2sw, …` instead is wrong
+    -- whenever a display column is not a multiple of 'shiftwidth' — tab indentation with `sw ~= ts`,
+    -- or 'vartabstop' — and the continuation guides then fail to line up with the levels above and
+    -- below them. Ties go to the previous line (the block the blank row continues).
+    local src = prev_row
+    if depth == nxt and (prev_row == nil or prev ~= depth) then
+        src = nxt_row
+    end
     ctx.blank[row] = depth
+    ctx.blank_src[row] = src or false
     return depth
+end
+
+--- The indent stops a BLANK row should draw, taken from the neighbour line that supplied its depth.
+--- Falls back to nil when no neighbour was found, so the caller keeps its own behaviour.
+---@param ctx table
+---@param buf integer
+---@param row integer  0-based
+---@param cap boolean?
+---@return integer depth
+---@return LvimIndentStop[]? stops  the source line's own stops, truncated to `depth`
+function M.blank_stops(ctx, buf, row, cap)
+    local depth = M.blank_depth(ctx, buf, row, cap)
+    local src = ctx.blank_src[row]
+    if not src then
+        return depth, nil
+    end
+    local out = {}
+    for _, stop in ipairs(M.info(ctx, buf, src).stops or {}) do
+        if stop.col < depth then
+            out[#out + 1] = stop
+        end
+    end
+    return depth, out
 end
 
 --- Drop a buffer's cache (edit-independent invalidation: :LvimIndent refresh, wipeout).
