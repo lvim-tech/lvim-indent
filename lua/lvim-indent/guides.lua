@@ -17,6 +17,7 @@ local guard = require("lvim-indent.guard")
 local scope = require("lvim-indent.scope")
 local chunk = require("lvim-indent.chunk")
 local anim = require("lvim-indent.anim")
+local column = require("lvim-indent.column")
 
 local api = vim.api
 
@@ -26,12 +27,16 @@ local M = {}
 ---@type integer
 local ns = api.nvim_create_namespace("lvim-indent")
 
---- Extmark priorities: the scope/chunk layer must win over a level guide on the same cell.
----@type integer, integer
-local PRIO_GUIDE, PRIO_SCOPE = 10, 20
+--- Extmark priorities: the scope/chunk layer must win over a level guide on the same cell, and
+--- the ruler sits UNDER both — it is fixed furniture, so an indent guide or a scope that lands on
+--- the same column must still be the thing you see. It is nonetheless far above the built-in
+--- backgrounds, which is what stops the ruler vanishing under CursorLine.
+---@type integer, integer, integer
+local PRIO_GUIDE, PRIO_SCOPE, PRIO_COLUMN = 10, 20, 5
 
 ---@class LvimIndentWinCtx
----@field skip boolean  This window draws nothing (guard said no)
+---@field skip boolean  This window draws nothing (both guard decisions said no)
+---@field skip_guides boolean  Guides/scope are out, but the ruler still draws
 ---@field buf? integer
 ---@field win? integer
 ---@field cache? LvimIndentBufCache
@@ -39,6 +44,8 @@ local PRIO_GUIDE, PRIO_SCOPE = 10, 20
 ---@field scope? table  Snapshot of the painted scope (rows clamped by the animation)
 ---@field diag? table<integer, table<integer, string>>  row → col → "error"|"warn"
 ---@field repeat_lb? boolean  Repeat guides on wrapped lines ('wrap' + 'breakindent')
+---@field columns? integer[]  0-based display columns of the rulers (nil = none for this window)
+---@field leftcol? integer    The window's horizontal scroll, so a ruler tracks it
 
 --- Per-window paint context, rebuilt by on_win (the provider calls on_win, then that window's
 --- on_line rows, strictly in sequence — one slot is enough).
@@ -195,10 +202,14 @@ end
 ---@return boolean  false skips on_line for this window entirely
 local function on_win(_, win, buf, top, bot)
     ctx.skip = true
-    if not guard.allowed(buf) then
+    -- Two decisions, not one: a filetype excluded from GUIDES can still want its ruler.
+    local guides_ok = guard.allowed(buf)
+    local column_ok = guard.column_allowed(buf)
+    if not guides_ok and not column_ok then
         return false
     end
     ctx.skip = false
+    ctx.skip_guides = not guides_ok
     ctx.win, ctx.buf = win, buf
     ctx.cache = cache.ctx(buf)
     ctx.repeat_lb = vim.wo[win].wrap and vim.wo[win].breakindent
@@ -222,6 +233,12 @@ local function on_win(_, win, buf, top, bot)
             end
         end
     end)
+    ctx.columns = column_ok and column.columns(win, buf) or nil
+    -- Resolved once per window per redraw rather than per row: it is a window property, and
+    -- on_line runs for every visible line.
+    ctx.leftcol = ctx.columns and api.nvim_win_call(win, function()
+        return vim.fn.winsaveview().leftcol
+    end) or 0
     ctx.diag = config.levels.diagnostics and diag_map(buf, top, bot) or nil
     return true
 end
@@ -235,6 +252,17 @@ local function on_line(_, win, buf, row)
     if ctx.skip or ctx.fold_start[row] then
         return
     end
+
+    -- ── Rulers ('colorcolumn') ──────────────────────────────────────────────────────────────
+    -- First, and before the guides' own exclusions are consulted: the ruler is drawn in
+    -- filetypes that get no guides at all, and it needs nothing from the indent cache.
+    if ctx.columns then
+        column.paint_row(buf, win, ns, row, ctx.columns, ctx.leftcol, PRIO_COLUMN)
+    end
+    if ctx.skip_guides then
+        return
+    end
+
     local info = cache.info(ctx.cache, buf, row)
     local sc = ctx.scope
     local sw = ctx.cache.sw

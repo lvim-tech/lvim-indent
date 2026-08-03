@@ -48,6 +48,22 @@
 ---@class LvimIndentExclude
 ---@field filetypes string[]  Real-file filetypes that still want no guides
 
+---@class LvimIndentColumn
+---@field enabled            boolean  Draw the 'colorcolumn' rulers as an unbroken virtual line
+---@field columns            integer[]|nil  Explicit 1-based columns; nil = follow 'colorcolumn'
+---@field char               string   The ruler glyph, drawn where the line stops short of it
+---@field accent             string   Palette key (or "#rrggbb") for the glyph
+---@field tint               number   Fg blend strength toward bg (1 = full accent)
+---@field crossing           boolean  Wash the cell where the TEXT crosses the ruler, so the line
+---                          never breaks. Off: the ruler stops at the text, as virt-column does
+---@field own_option        boolean  Take 'colorcolumn' over: keep its value as the source of
+---                          WHERE the ruler is, and blank the option so Neovim draws no
+---                          background band under the drawn line. Off: both are drawn
+---@field exclude_filetypes string[]  Filetypes with no ruler. Its OWN list: `exclude.filetypes`
+---                          is about indentation and says nothing about where column 80 is
+---@field crossing_tint      number   Bg blend strength of that wash (a background, so it is kept
+---                          far below the glyph's — a ruler is permanent furniture)
+
 ---@class LvimIndentStatuscolumn
 ---@field enabled boolean  Expose the scope in the gutter instead of over the text (suppresses the
 ---                        in-text scope guide; see lvim-indent.statuscolumn)
@@ -65,6 +81,7 @@
 ---@field chunk            LvimIndentChunk
 ---@field exclude          LvimIndentExclude
 ---@field statuscolumn     LvimIndentStatuscolumn
+---@field column          LvimIndentColumn
 
 ---@type LvimIndentConfig
 return {
@@ -122,6 +139,29 @@ return {
         -- Non-file buffers (panels, trees, terminals, quickfix, prompts …) are excluded by
         -- CONSTRUCTION (buftype ~= ""), never by name — these are the exceptions among REAL files.
         filetypes = { "checkhealth", "gitcommit", "help", "log", "man", "markdown", "org", "text" },
+    },
+
+    -- The 'colorcolumn' rulers, redrawn as a continuous line. Neovim's own is a background
+    -- cell, so every group with a bg wins over it and the ruler vanishes on the cursor line;
+    -- owning the drawing is what fixes that. Set `vim.opt.colorcolumn` as usual — this reads it.
+    column = {
+        enabled = true,
+        columns = nil,
+        char = "│",
+        -- "cursorline" takes the cursor line's own colour; a palette key or "#rrggbb" also work.
+        accent = "cursorline",
+        -- Dims that colour toward the background, so the ruler is the same hue as the band but a
+        -- step quieter — which is what tells them apart where they cross.
+        tint = 0.75,
+        crossing = true,
+        -- Off by default: taking an option over is not something a plugin should do unasked.
+        -- On, 'colorcolumn' keeps meaning what it always meant — the control panel, `:set`, a
+        -- modeline — and only the drawing moves here.
+        own_option = false,
+        exclude_filetypes = {},
+        -- Far weaker than the glyph: the wash sits under real characters on every long line, and
+        -- at the glyph's strength it read as a highlighted column rather than as a ruler.
+        crossing_tint = 0.22,
     },
 
     statuscolumn = { enabled = false },

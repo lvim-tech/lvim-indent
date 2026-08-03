@@ -174,12 +174,15 @@ function M.setup(opts)
     uu.merge(config, opts or {})
     validate_glyphs()
     if registered then
+        -- A second setup() is a retune, and `own_option` is one of the values it can retune.
+        require("lvim-indent.column").own(config.column.enabled and config.column.own_option)
         M.refresh()
         return
     end
     registered = true
 
     require("lvim-utils.highlight").bind(require("lvim-indent.highlights").build)
+    require("lvim-indent.column").own(config.column.enabled and config.column.own_option)
     guides.setup()
     scope.setup()
 

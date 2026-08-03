@@ -70,6 +70,32 @@ function M.decide(buf)
     return true, "ok"
 end
 
+--- The RULER's decision, which is deliberately not the guides' one.
+---
+--- A ruler is not an indent guide: `exclude.filetypes` says "this file's indentation is not worth
+--- drawing", which has nothing to say about where column 80 is. Tying them together meant the
+--- ruler silently vanished in every excluded filetype — json here — and the report was "it does
+--- not work", with nothing on screen to suggest why. The by-construction buftype guard still
+--- applies (no rulers in panels or trees), and `column.exclude_filetypes` is the ruler's own lever.
+---@param buf integer
+---@return boolean
+function M.column_allowed(buf)
+    local cfg = config.column
+    if not config.enabled or not cfg.enabled or disabled[buf] then
+        return false
+    end
+    if not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].buftype ~= "" then
+        return false
+    end
+    local ft = vim.bo[buf].filetype
+    for _, f in ipairs(cfg.exclude_filetypes or {}) do
+        if f == ft then
+            return false
+        end
+    end
+    return true
+end
+
 --- The boolean decision (the hot path — one call per window per redraw).
 ---@param buf integer
 ---@return boolean
