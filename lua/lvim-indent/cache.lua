@@ -146,7 +146,7 @@ end
 ---@param ctx LvimIndentBufCache
 ---@param buf integer
 ---@param row integer  0-based blank row
----@param cap boolean  smart_indent_cap
+---@param cap boolean?  smart_indent_cap
 ---@return integer     Depth in display columns (0 = no guides)
 function M.blank_depth(ctx, buf, row, cap)
     local cached = ctx.blank[row]

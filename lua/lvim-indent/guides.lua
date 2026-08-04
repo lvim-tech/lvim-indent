@@ -50,7 +50,7 @@ local PRIO_GUIDE, PRIO_SCOPE, PRIO_COLUMN = 10, 20, 5
 --- Per-window paint context, rebuilt by on_win (the provider calls on_win, then that window's
 --- on_line rows, strictly in sequence — one slot is enough).
 ---@type LvimIndentWinCtx
-local ctx = { skip = true }
+local ctx = { skip = true, skip_guides = true }
 
 --- Severity rank for the diagnostics map (error wins over warn on the same cell).
 ---@type table<string, integer>
