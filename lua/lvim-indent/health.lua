@@ -23,6 +23,12 @@ local function check_glyph(health, name, glyph)
     if glyph == nil or glyph == "" then
         return
     end
+    -- Measuring a glyph that holds a NUL byte would throw E976 (it crosses into Vimscript as a
+    -- Blob) and take the whole health check down with it, so it is reported as the error it is.
+    if type(glyph) ~= "string" or glyph:find("%z") then
+        health.error(("%s = %s is not a printable glyph"):format(name, vim.inspect(glyph)))
+        return
+    end
     local w = vim.fn.strdisplaywidth(glyph)
     if w == 1 then
         health.ok(("%s = %q (single width)"):format(name, glyph))

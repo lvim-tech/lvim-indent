@@ -44,6 +44,11 @@ end
 
 --- Reject a glyph that is not exactly one display cell wide (it would shift every cell the
 --- overlay covers). "" is allowed where the config documents it.
+---
+--- The NUL test comes BEFORE the measurement and short-circuits it: a string holding a NUL byte
+--- reaches Vimscript as a Blob, and `strdisplaywidth()` answers that with E976 — the caller would
+--- see nothing but "Using a Blob as a String" instead of being told which glyph is wrong. Such a
+--- glyph is invalid input, not content to render, so it is refused here rather than normalised.
 ---@param name string  config path for the error message
 ---@param glyph string|nil
 ---@param allow_empty? boolean
@@ -52,7 +57,7 @@ local function validate_glyph(name, glyph, allow_empty)
     if glyph == nil or (allow_empty and glyph == "") then
         return
     end
-    if type(glyph) ~= "string" or vim.fn.strdisplaywidth(glyph) ~= 1 then
+    if type(glyph) ~= "string" or glyph:find("%z") or vim.fn.strdisplaywidth(glyph) ~= 1 then
         error(("lvim-indent: %s must be a single-width glyph (got %s)"):format(name, vim.inspect(glyph)), 0)
     end
 end

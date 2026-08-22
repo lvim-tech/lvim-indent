@@ -182,6 +182,13 @@ function M.paint_row(buf, win, ns, row, columns, leftcol, priority)
     if not line then
         return
     end
+    -- A line holding NUL bytes (binary buffers, terminal output) crosses into Vimscript as a Blob,
+    -- and every function taking a string rejects it with E976 — the decoration provider then threw
+    -- on each redraw. Vim itself represents an in-line NUL as NL, so the swap is byte for byte:
+    -- display widths and the byte offsets used below stay exactly as the buffer has them.
+    if line:find("%z") then
+        line = line:gsub("%z", "\n")
+    end
     local width = fn.strdisplaywidth(line)
     for _, col in ipairs(columns) do
         M.paint(buf, win, ns, row, col, line, width, leftcol, priority)
