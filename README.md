@@ -24,7 +24,7 @@ Indent guides that know what you are inside of — every indent level drawn (inc
 
 ## Installation
 
-Requires Neovim >= 0.10 and [lvim-utils](https://github.com/lvim-tech/lvim-utils) (palette-bound highlights and the shared config merge). [lvim-ts](https://github.com/lvim-tech/lvim-ts) is optional — with it the scope's treesitter engine resolves the buffer's language through the set's parser registry; without it (or without a parser) the scope falls back to the indent engine.
+Requires Neovim >= 0.12 and [lvim-utils](https://github.com/lvim-tech/lvim-utils) (palette-bound highlights and the shared config merge). [lvim-ts](https://github.com/lvim-tech/lvim-ts) is optional — with it the scope's treesitter engine resolves the buffer's language through the set's parser registry; without it (or without a parser) the scope falls back to the indent engine.
 
 ### lvim-installer (recommended)
 
